@@ -1,15 +1,18 @@
-name: Sync to Hugging Face Hub
+name: Sync to Hugging Face hub
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
-  sync:
+  sync-to-hub:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: huggingface/hub-sync@v0.1.0
+      - uses: actions/checkout@v3
         with:
-          github_repo_id: ${{ github.repository }}
-          huggingface_repo_id: username/my-space
-          hf_token: ${{ secrets.HF_TOKEN }}
+          fetch-depth: 0
+          lfs: true
+      - name: Push to hub
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: git push https://Enderchef:$HF_TOKEN@huggingface.co/spaces/Enderchef/SLM-Arena main
