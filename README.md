@@ -1,7 +1,7 @@
 ---
-title: SLM Arena
-emoji: ⚔️
-colorFrom: indigo
+title: SupraLabs Studio
+emoji: ✦
+colorFrom: purple
 colorTo: blue
 sdk: gradio
 sdk_version: 6.22.0
@@ -9,47 +9,40 @@ python_version: '3.12'
 app_file: app.py
 pinned: false
 license: gpl-3.0
-short_description: Blindly compare tiny language model outputs and vote.
+short_description: Four specialized SupraLabs model demos in one ZeroGPU Space.
 ---
 
-# SLM Arena
+# SupraLabs Studio
 
-A ZeroGPU Hugging Face Space for anonymous head-to-head comparisons of the top 20
-Efficiency entries in [Glint Research's Tiny-ML Leaderboard](https://huggingface.co/spaces/Glint-Research/Tiny-ML-Leaderboard).
-The model names are concealed until a visitor votes.
+A single Hugging Face **ZeroGPU** Space for the complete public [SupraLabs](https://huggingface.co/SupraLabs) catalog. The interface uses SupraLabs’ purple (`#8F5BFF`) and blue (`#4DB8FF`) visual palette.
 
-## Modes
+## Demos
 
-- **Completion** samples two models from the full top-20 list and continues the supplied text.
-- **Reply** samples only the instruction-tuned entries (`Supra-50M-Instruct`,
-  `KeyLM-75M-Instruct`, and `Supra-1.5-50M-Instruct-exp`). It uses a model's
-  published tokenizer chat template when one exists.
+| Demo | Checkpoint | Input / output contract |
+| --- | --- | --- |
+| **Instruct** | [`SupraLabs/Supra-1.5-50M-Instruct-exp`](https://huggingface.co/SupraLabs/Supra-1.5-50M-Instruct-exp) | Chat-style instruction following. Uses the checkpoint’s published chat template when it has one. |
+| **Next token** | [`SupraLabs/Supra-1.5-50M-Base-exp`](https://huggingface.co/SupraLabs/Supra-1.5-50M-Base-exp) | Raw next-token continuation from a supplied seed; no chat wrapper is added. |
+| **Title generator** | [`SupraLabs/supra-title-50m-pre`](https://huggingface.co/SupraLabs/supra-title-50m-pre) | First chat message in; a concise title out. It uses the model card’s training format: `User: <message>\nTitle:`. |
+| **Thinking summarizer** | [`SupraLabs/reasoning-summarizer-800m-pre`](https://huggingface.co/SupraLabs/reasoning-summarizer-800m-pre) | Plain-text reasoning chain in; JSON metadata (`title`, `sub_title`, `summary`, `cur_task`) out. |
 
-Models are loaded one at a time with `AutoModelForCausalLM`, generated, and
-released. This keeps the Space within a shared ZeroGPU allocation rather than
-keeping twenty checkpoints in VRAM. Unsupported or gated checkpoints return a
-clear per-round error; they are never silently replaced with another model.
+## Full catalog and version comparison
 
-## Deploying
+The **All models** tab makes every public release discoverable, including the current and predecessor releases of Instruct, Base, Title, Router, Mini, Reasoning, weather, and A2A families. The predecessor toggle exposes v1–v5 entries and adds them to both sides of the built-in comparison panel, so a current checkpoint and an older version can be run side by side on exactly the same raw prompt.
 
-1. Create the dataset repository **`Enderchef/slm-arena-votes`** (private is
-   recommended if prompts/outputs should not be public).
-2. In the Space **Settings → Variables and secrets**, add a secret named
-   `HF_TOKEN`. It needs write access to that dataset repo.
-3. Enable ZeroGPU hardware for the Space. The generation handler is decorated
-   with `@spaces.GPU(duration=120)` and the Gradio queue serializes requests to
-   avoid VRAM contention.
+Standard Transformers causal-language-model releases are runnable in the playground. GGUF releases are documented in the catalog but require a llama.cpp runtime; A2A is image-capable; and SupraWeather models are tabular classifiers, so their input contracts need their dedicated modality demos rather than the raw text runner. `Supra2-100M` is visible for completeness but its publisher has gated it as an internal artifact, so it cannot be loaded by the Space.
 
-Each vote is an immutable `votes/<uuid>.json` commit in the dataset repository.
-Using one file per vote avoids lost votes from concurrent Space replicas. Stored
-records include the prompt, outputs, anonymous-side choice, models, mode, and
-UTC timestamp—do not submit secrets or personal data.
+## ZeroGPU design
 
-## Local run
+Each action is independently decorated with `@spaces.GPU`. A checkpoint is loaded for that request only, generated from, then released with CUDA cache cleanup. This keeps the large summarizer and the smaller 50M models from permanently occupying shared VRAM. The Gradio queue is serialized to avoid competing model loads.
+
+The Space intentionally does not retain prompts or outputs. Please do not enter private or sensitive text. These are research/experimental checkpoints, so outputs can be incomplete or malformed—particularly the summarizer’s JSON.
+
+## Local development
 
 ```bash
 pip install -r requirements.txt
 python app.py
+python -m unittest discover -s tests
 ```
 
-Run the lightweight checks with `python -m unittest discover -s tests`.
+For hosted inference, enable **ZeroGPU** on the Hugging Face Space hardware settings.
