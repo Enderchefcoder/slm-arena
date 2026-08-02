@@ -30,8 +30,15 @@ class SupraStudioSourceTests(unittest.TestCase):
             },
         )
 
+    def test_catalog_covers_the_public_model_families(self):
+        self.assertIn("MODEL_CATALOG", self.source)
+        for family in ("Chat / Instruct", "Base / next-token", "Titles", "Reasoning", "Routing / specialist", "Supra Mini", "Multimodal / weather"):
+            self.assertIn(family, self.source)
+        for model in ("Supra-A2A-Nano-Exp", "SupraWeather1.5-Small", "Supra-Title-350M-exp-GGUF", "Supra2-100M"):
+            self.assertIn(model, self.source)
+
     def test_each_demo_is_zero_gpu_decorated(self):
-        for handler in ("run_instruct", "run_ntp", "run_title", "run_thinking_summarizer"):
+        for handler in ("run_instruct", "run_ntp", "run_title", "run_thinking_summarizer", "run_explorer", "run_model_comparison"):
             node = next(item for item in self.tree.body if isinstance(item, ast.FunctionDef) and item.name == handler)
             self.assertTrue(node.decorator_list, handler)
             self.assertIn("GPU", ast.unparse(node.decorator_list[0]))

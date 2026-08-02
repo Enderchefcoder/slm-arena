@@ -19,6 +19,55 @@ NTP_MODEL = "SupraLabs/Supra-1.5-50M-Base-exp"
 TITLE_MODEL = "SupraLabs/supra-title-50m-pre"
 THINKING_SUMMARIZER_MODEL = "SupraLabs/reasoning-summarizer-800m-pre"
 
+# Every public SupraLabs release is discoverable below. Current releases are shown
+# by default; predecessor checkpoints become available with the version toggle.
+# Gated internal training artifacts are catalogued but are never loaded by the Space.
+MODEL_CATALOG = {
+    "Chat / Instruct": [
+        ("Supra-1.5 50M Instruct (current)", INSTRUCT_MODEL),
+        ("Supra-50M Instruct (v1)", "SupraLabs/Supra-50M-Instruct"),
+    ],
+    "Base / next-token": [
+        ("Supra-1.5 50M Base (current)", NTP_MODEL),
+        ("Supra-50M Base (v1)", "SupraLabs/Supra-50M-Base"),
+        ("Supra2 100M (gated internal checkpoint)", "SupraLabs/Supra2-100M"),
+    ],
+    "Titles": [
+        ("Supra Title 350M (current, GGUF)", "SupraLabs/Supra-Title-350M-exp-GGUF"),
+        ("Supra Title 50M (v1)", TITLE_MODEL),
+        ("Supra Title 50M GGUF (v1)", "SupraLabs/supra-title-50M-pre-gguf"),
+    ],
+    "Reasoning": [
+        ("Reasoning Summarizer 0.8B (current)", THINKING_SUMMARIZER_MODEL),
+        ("Supra 50M Reasoning", "SupraLabs/Supra-50M-Reasoning"),
+    ],
+    "Routing / specialist": [
+        ("Supra Router 51M", "SupraLabs/Supra-Router-51M"),
+        ("Supra Router 51M GGUF", "SupraLabs/Supra-Router-51M-gguf"),
+        ("StorySupra 10M", "SupraLabs/StorySupra-10M"),
+        ("DistillSupra 0.2M", "SupraLabs/DistillSupra-0.2M"),
+        ("MicroSupra 1K", "SupraLabs/MicroSupra-1k"),
+    ],
+    "Supra Mini": [
+        ("Supra Mini v6 1M (current)", "SupraLabs/Supra-Mini-v6-1M"),
+        ("Supra Mini v5 8M (v5)", "SupraLabs/Supra-Mini-v5-8M"),
+        ("Supra Mini v4 2M (v4)", "SupraLabs/Supra-Mini-v4-2M"),
+        ("Supra Mini v3 0.5M (v3)", "SupraLabs/Supra-Mini-v3-0.5M"),
+        ("Supra Mini v2 0.1M (v2)", "SupraLabs/Supra-Mini-v2-0.1M"),
+        ("Supra Mini 0.1M (v1)", "SupraLabs/Supra-Mini-0.1M"),
+    ],
+    "Multimodal / weather": [
+        ("Supra A2A Nano (text + image)", "SupraLabs/Supra-A2A-Nano-Exp"),
+        ("SupraWeather 1.5 Small", "SupraLabs/SupraWeather1.5-Small"),
+        ("SupraWeather Nano Preview", "SupraLabs/SupraWeather-Nano-Preview"),
+    ],
+}
+# Standard Transformers text-generation checkpoints exposed in the model explorer.
+EXPLORER_MODELS = [
+    item for group in MODEL_CATALOG.values() for item in group
+    if "GGUF" not in item[0] and "gated" not in item[0] and "Weather" not in item[0] and "A2A" not in item[0]
+]
+
 
 def _device():
     return "cuda" if torch.cuda.is_available() else "cpu"
@@ -124,6 +173,60 @@ def run_thinking_summarizer(reasoning, max_tokens):
         return raw
 
 
+@GPU(duration=120)
+def run_explorer(model_id, prompt, max_tokens, temperature):
+    """Run a chosen public text-generation checkpoint without changing its prompt."""
+    prompt = (prompt or "").strip()
+    if not prompt:
+        raise gr.Error("Enter a prompt first.")
+    if model_id not in {repo_id for _, repo_id in EXPLORER_MODELS}:
+        raise gr.Error("This checkpoint needs its dedicated modality runtime; choose a text model instead.")
+    return _load_and_generate(model_id, prompt, max_tokens, temperature)
+
+
+def explorer_choices(show_legacy):
+    if show_legacy:
+        return EXPLORER_MODELS
+    return [(label, model_id) for label, model_id in EXPLORER_MODELS
+            if not any(tag in label for tag in ("(v1)", "(v2)", "(v3)", "(v4)", "(v5)"))]
+
+
+def update_explorer_choices(show_legacy):
+    choices = explorer_choices(show_legacy)
+    return gr.update(choices=choices, value=choices[0][1])
+
+
+@GPU(duration=180)
+def run_model_comparison(left_id, right_id, prompt, max_tokens, temperature):
+    prompt = (prompt or "").strip()
+    allowed = {repo_id for _, repo_id in EXPLORER_MODELS}
+    if not prompt:
+        raise gr.Error("Enter a prompt first.")
+    if left_id not in allowed or right_id not in allowed:
+        raise gr.Error("Choose text-generation checkpoints for comparison.")
+    if left_id == right_id:
+        raise gr.Error("Choose two different checkpoints to compare.")
+    return (
+        _load_and_generate(left_id, prompt, max_tokens, temperature),
+        _load_and_generate(right_id, prompt, max_tokens, temperature),
+    )
+
+
+def catalog_markdown(show_legacy):
+    lines = ["### Complete SupraLabs catalog", "Current releases are marked **current**. Select **Show predecessor releases** to inspect earlier versions side by side."]
+    for family, models in MODEL_CATALOG.items():
+        entries = []
+        for label, model_id in models:
+            legacy = any(tag in label for tag in ("(v1)", "(v2)", "(v3)", "(v4)", "(v5)"))
+            if not show_legacy and legacy:
+                continue
+            entries.append(f"- **{label}** — [`{model_id}`](https://huggingface.co/{model_id})")
+        if entries:
+            lines.extend([f"\n#### {family}", *entries])
+    lines.append("\n*GGUF checkpoints, the image-capable A2A model, and weather classifiers are listed so the Space covers the complete public catalog; their specialized runtimes differ from causal text generation. Supra2 is gated by its publisher and cannot be loaded here.*")
+    return "\n".join(lines)
+
+
 CSS = """
 :root { --supra-purple: #8f5bff; --supra-blue: #4db8ff; --ink: #10182e; }
 .gradio-container { max-width: 1180px !important; background: #f7f8ff;
@@ -180,6 +283,39 @@ with gr.Blocks(title="SupraLabs Studio", theme=gr.themes.Base(), css=CSS) as dem
             thinking_button = gr.Button("Create structured summary", variant="primary", elem_classes="primary-btn")
             thinking_output = gr.Code(label="Structured metadata", language="json", interactive=False)
             thinking_button.click(run_thinking_summarizer, [thinking_input, thinking_tokens], thinking_output)
+
+        with gr.Tab("▦ All models", id="all-models"):
+            gr.HTML("<div class='model-card'><h2>Every public SupraLabs release</h2><p>Use the text-model playground for compatible causal-LM checkpoints, and browse all specialist, GGUF, multimodal, and weather releases below. Enable predecessor releases to compare generations side by side in separate browser tabs.</p></div>")
+            with gr.Row():
+                explorer_model = gr.Dropdown(
+                    choices=explorer_choices(False), value=explorer_choices(False)[0][1],
+                    label="Text-generation checkpoint", info="Current releases and unique models are included; choose a predecessor for a version comparison."
+                )
+                explorer_tokens = gr.Slider(8, 256, value=96, step=8, label="Maximum new tokens")
+                explorer_temp = gr.Slider(0, 1.5, value=0.7, step=0.1, label="Temperature")
+            explorer_input = gr.Textbox(label="Raw prompt", lines=5, placeholder="Write a short paragraph about a solar-powered garden.")
+            explorer_button = gr.Button("Run selected model", variant="primary", elem_classes="primary-btn")
+            explorer_output = gr.Markdown(label="Model output")
+            explorer_button.click(run_explorer, [explorer_model, explorer_input, explorer_tokens, explorer_temp], explorer_output)
+            gr.Markdown("### Side-by-side version comparison")
+            with gr.Row():
+                compare_left = gr.Dropdown(choices=explorer_choices(False), value=INSTRUCT_MODEL, label="Model A")
+                compare_right = gr.Dropdown(choices=explorer_choices(False), value=NTP_MODEL, label="Model B")
+            compare_button = gr.Button("Compare two models", elem_classes="primary-btn")
+            with gr.Row():
+                compare_left_output = gr.Markdown(label="Model A output")
+                compare_right_output = gr.Markdown(label="Model B output")
+            compare_button.click(
+                run_model_comparison,
+                [compare_left, compare_right, explorer_input, explorer_tokens, explorer_temp],
+                [compare_left_output, compare_right_output],
+            )
+            legacy_toggle = gr.Checkbox(label="Show predecessor releases (v1–v5) in catalog", value=False)
+            catalog = gr.Markdown(catalog_markdown(False))
+            legacy_toggle.change(update_explorer_choices, legacy_toggle, explorer_model)
+            legacy_toggle.change(update_explorer_choices, legacy_toggle, compare_left)
+            legacy_toggle.change(update_explorer_choices, legacy_toggle, compare_right)
+            legacy_toggle.change(catalog_markdown, legacy_toggle, catalog)
     gr.HTML("<footer>Models are loaded only for your request and released afterwards to share ZeroGPU capacity. Experimental models may produce imperfect output—do not submit sensitive information.</footer>")
 
 if __name__ == "__main__":
