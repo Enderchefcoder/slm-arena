@@ -9,7 +9,7 @@ python_version: '3.12'
 app_file: app.py
 pinned: false
 license: gpl-3.0
-The complete SupraLabs demo site, powered by ZeroGPU.
+short_description: Four specialized SupraLabs model demos in one ZeroGPU Space.
 ---
 
 # SupraLabs Studio
